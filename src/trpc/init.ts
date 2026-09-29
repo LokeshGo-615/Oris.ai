@@ -1,15 +1,14 @@
-import { initTRPC , TRPCError } from '@trpc/server';
-import { cache } from 'react';
+import * as Sentry from "@sentry/node";
 import { auth } from '@clerk/nextjs/server';
-import superjson from 'superjson';
- 
+import { initTRPC, TRPCError } from '@trpc/server';
+import { cache } from 'react';
+import superjson from "superjson";
 export const createTRPCContext = cache(async () => {
   /**
    * @see: https://trpc.io/docs/server/context
    */
-  return { userId: 'user_123' };
+  return {};
 });
- 
 // Avoid exporting the entire t-object
 // since it's not very descriptive.
 // For instance, the use of a t variable
@@ -20,37 +19,45 @@ const t = initTRPC.create({
    */
   transformer: superjson,
 });
- 
+
+const sentryMiddleware = t.middleware(
+  Sentry.trpcMiddleware({
+    attachRpcInput: true,
+  }),
+);
+
 // Base router and procedure helpers
 export const createTRPCRouter = t.router;
 export const createCallerFactory = t.createCallerFactory;
-export const baseProcedure = t.procedure;
+export const baseProcedure = t.procedure.use(sentryMiddleware);
 
-//Authenticated procedure - calls auth() only when needed
+// Authenticated procedure - calls auth() only when needed
+export const authProcedure = baseProcedure.use(async ({ next }) => {
+  const { userId } = await auth();
 
-export const authProcedure = t.procedure.use(async ({next}) => {
-  const {userId} = await auth() ;
-
-  if(!userId){
-    throw new TRPCError({code : "UNAUTHORIZED"})
+  if (!userId) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
   }
+
   return next({
-    ctx: {userId }
+    ctx: { userId },
   });
 });
 
-export const orgProcedure = t.procedure.use(async({next}) =>{
-  const {userId ,orgId} = await auth() ;
-  if(!userId){
-    throw new TRPCError({code : "UNAUTHORIZED"})
+// Organization procedure - requires userId and orgId
+export const orgProcedure = baseProcedure.use(async ({ next }) => {
+  const { userId, orgId } = await auth();
+
+  if (!userId) {
+    throw new TRPCError({ code: "UNAUTHORIZED" });
   }
 
-  if(!orgId){
+  if (!orgId) {
     throw new TRPCError({
-      code:"FORBIDDEN",
-      message:"Organization required"
-    })
+      code: "FORBIDDEN",
+      message: "Organization required",
+    });
   }
 
-  return next({ ctx : {userId , orgId}});
-})
+  return next({ ctx: { userId, orgId } });
+});

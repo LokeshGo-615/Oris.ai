@@ -57,7 +57,7 @@ export const generationsRouter = createTRPCRouter({
     )
     .mutation(async ({ input, ctx }) => {
       // Check for active subscription before generation
-    
+      
 
       const voice = await prisma.voice.findUnique({
         where: {
@@ -188,8 +188,9 @@ export const generationsRouter = createTRPCRouter({
           message: "Failed to store generated audio",
         });
       }
+
       // Ingest usage event to Polar (fire-and-forget, don't block response)
-    
+     
 
       return {
         id: generationId,
